@@ -1,55 +1,124 @@
+// ============================================================
+//  UART Serial Communication - PIC18F4520
+//  Baud Rate : 9600 bps
+//  Crystal   : 20 MHz (HS mode)
+//  Mode      : 8-bit Async, BRG16=1, BRGH=1
+//
+//  Baud Rate Calculation:
+//    Baud = Fosc / (4 x (SPBRGH:SPBRG + 1))
+//    SPBRGH:SPBRG = (20,000,000 / (4 x 9600)) - 1
+//                 = 520.83 -> round to 520 = 0x0208
+//    Actual Baud  = 20,000,000 / (4 x 521) = 9597 bps (0.03% error) ✅
+//
+//  Connections:
+//    RC6 -> TX (output)
+//    RC7 -> RX (input)
+// ============================================================
+
 #include <p18F4520.h>
 
-//Configuration bit setting//
+// Configuration Bits
+#pragma config OSC   = HS
+#pragma config PWRT  = OFF
+#pragma config WDT   = OFF
+#pragma config DEBUG = OFF, LVP = OFF
 
-#pragma config OSC=HS
-#pragma config PWRT=OFF
-#pragma config WDT=OFF
-#pragma config DEBUG=OFF, LVP=OFF 
+// Messages
+unsigned char MSG1[] = "UART COMMUNICATION \r\n";
+unsigned char MSG2[] = "Received Data: ";
+unsigned char MSG3[] = "\r\n";
 
-#define _XTAL_FREQ 20000000
-
+// -------------------------------------------------------
+// Transmit a null-terminated string over UART
+// -------------------------------------------------------
 void Transmit_String(unsigned char *string)
 {
-    unsigned char i=0;
- 	for(i=0;string[i]!='\0';i++) //loop till end of the string
- 	{
-        while(PIR1bits.TXIF == 0);
-        TXREG = string[i];
-        
-    }	
-}
- 
-
-unsigned char MSG1[] = {"UART COMMUNICATION \r\n"};
-unsigned char MSG2[] = {"Received Data \r\n"};
-unsigned char MSG3[] = {" \r\n"};
-void main(void)
-{
-    unsigned char j=0;
-    unsigned char RX_DATA[10];
-    
-    TRISCbits.TRISC7 = 1;   // RXD as Input
-    TRISCbits.TRISC6 = 0;   // TXD as Output
-    RCSTA = 0x90;
-    TXSTA = 0x24;
-    BAUDCON = 0x08;
-    SPBRG = 0x0A;
-    SPBRGH = 0x02;
-           
-    Transmit_String (MSG1);
-  
-    for (j=0; j<6 ; j++)
+    unsigned char i = 0;
+    while(string[i] != '\0')
     {
-        while(PIR1bits.RCIF == 0);
-        RX_DATA[j] = RCREG;
+        while(PIR1bits.TXIF == 0);  // Wait until TX register is empty
+        TXREG = string[i];           // Load character into TX register
+        i++;
+    }
+}
+
+// -------------------------------------------------------
+// Transmit a single character over UART
+// -------------------------------------------------------
+void Transmit_Char(unsigned char ch)
+{
+    while(PIR1bits.TXIF == 0);      // Wait until TX register is empty
+    TXREG = ch;
+}
+
+// -------------------------------------------------------
+// Receive a single character with error handling
+// Returns 0xFF on error
+// -------------------------------------------------------
+unsigned char Receive_Char(void)
+{
+    // FIX: Check and clear Overrun Error (locks up receiver if uncleared)
+    if(RCSTAbits.OERR)
+    {
+        RCSTAbits.CREN = 0;         // Clear continuous receive to reset OERR
+        RCSTAbits.CREN = 1;         // Re-enable receiver
+        return 0xFF;                 // Return error flag
     }
 
-    RX_DATA[6] = '\0';
-    Transmit_String (MSG2);
-    Transmit_String (RX_DATA);
-   Transmit_String (MSG3);
-    while(1);
-  
-    
+    // FIX: Check Framing Error (bad stop bit — noise or baud mismatch)
+    if(RCSTAbits.FERR)
+    {
+        unsigned char dummy = RCREG; // Flush the bad byte to clear FERR
+        return 0xFF;                 // Return error flag
+    }
+
+    while(PIR1bits.RCIF == 0);      // Wait until data is received
+    return RCREG;                    // Read and return received byte
+}
+
+// -------------------------------------------------------
+// Main Program
+// -------------------------------------------------------
+void main(void)
+{
+    unsigned char j;
+    unsigned char RX_DATA[10];
+
+    // UART Pin Direction
+    TRISCbits.TRISC7 = 1;   // RC7 = RX -> Input
+    TRISCbits.TRISC6 = 0;   // RC6 = TX -> Output
+
+    // UART Register Setup
+    RCSTA  = 0x90;   // SPEN=1 (serial port ON), CREN=1 (continuous receive)
+    TXSTA  = 0x24;   // TXEN=1 (TX enabled), BRGH=1 (high baud rate), SYNC=0 (async)
+    BAUDCON = 0x08;  // BRG16=1 (16-bit baud rate generator)
+
+    // FIX: Corrected baud rate registers for 9600 bps @ 20 MHz
+    // 0x0208 = 520 -> Actual = 9597 bps (0.03% error)
+    SPBRGH = 0x02;   // High byte of baud rate divisor
+    SPBRG  = 0x08;   // FIX: Was 0x0A (9561 bps, 0.41% error) -> now 0x08 (9597 bps, 0.03% error)
+
+    // Send welcome message
+    Transmit_String(MSG1);
+
+    // Receive 6 characters with error handling
+    for(j = 0; j < 6; j++)
+    {
+        RX_DATA[j] = Receive_Char();  // FIX: Uses safe receive with error checking
+
+        // Optional: re-request if error received
+        if(RX_DATA[j] == 0xFF)
+        {
+            j--;    // Retry this position
+            continue;
+        }
+    }
+    RX_DATA[6] = '\0';  // Null-terminate the received string
+
+    // Echo back received data
+    Transmit_String(MSG2);          // Send "Received Data: "
+    Transmit_String(RX_DATA);       // Echo the 6 received characters
+    Transmit_String(MSG3);          // Send "\r\n"
+
+    while(1);   // Halt
 }
