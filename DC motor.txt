@@ -1,43 +1,94 @@
+// ============================================================
+//  PWM Generator - PIC18F4520
+//  CCP1 (RC2) cycles through 25%, 50%, 75% duty cycle
+//  every 2 seconds
+//
+//  Crystal : 20 MHz (HS mode)
+//  PWM Freq: ~3.95 kHz
+//
+//  PWM Period Calculation:
+//    Period = (PR2 + 1) x 4 x Tosc x Prescaler
+//           = (78 + 1) x 4 x (1/20MHz) x 16
+//           = 252.8 us  ->  ~3.95 kHz
+//
+//  Max 10-bit count = 4 x (PR2 + 1) = 4 x 79 = 316
+//
+//  Duty Cycle Formula:
+//    10-bit value = (Duty%) x 316
+//    CCPR1L = 10-bit value >> 2  (upper 8 bits)
+//    DC1B1:DC1B0 = 10-bit value & 0x03  (lower 2 bits)
+//
+//  Duty Cycle Table:
+//    25% -> 10-bit = 79  (0x4F) -> CCPR1L=0x13, DC1B1=1, DC1B0=1
+//    50% -> 10-bit = 158 (0x9E) -> CCPR1L=0x27, DC1B1=1, DC1B0=0
+//    75% -> 10-bit = 237 (0xED) -> CCPR1L=0x3B, DC1B1=0, DC1B0=1
+// ============================================================
+
 #include <p18f4520.h>
-//#pragma config OSC = HS //Oscillator Selection
-//#pragma config WDT = OFF //Disable Watchdog timer
-//#pragma config LVP = OFF //Disable Low Voltage Programming
-//#pragma config PBADEN = OFF //Disable PORTB Analog inputs
 
-void myMsDelay (unsigned int time) 	// Definition of delay subroutine
+// Configuration Bits
+#pragma config OSC   = HS    // High-Speed Crystal (20 MHz)
+#pragma config PWRT  = OFF
+#pragma config WDT   = OFF
+#pragma config LVP   = OFF
+#pragma config PBADEN = OFF  // PORTB<4:0> as Digital I/O
+
+// -------------------------------------------------------
+// Software Delay (calibrated for 20 MHz crystal)
+// Inner loop count ~1250 gives approx 1 ms per iteration
+// -------------------------------------------------------
+void myMsDelay(unsigned int time)
 {
-	unsigned int i, j;
-	for (i = 0; i < time; i++)		// Loop for i time
-		for (j = 0; j < 275; j++);	// Calibrated for a 1 ms delay in MPLAB
+    unsigned int i, j;
+    for(i = 0; i < time; i++)
+        for(j = 0; j < 1250; j++);
 }
 
-void main()
-{ 
-	TRISCbits.TRISC4 = 0 ;	// Set PORTC, RC4 as output (DCM IN1)
-	TRISCbits.TRISC5 = 0 ;	// Set PORTC, RC5 as output (DCM IN2)	
-	TRISCbits.TRISC1 = 0 ;	// Set PORTC, RC1 as output (CCP2 - DCM EN1)
-   	PR2 = 0x4E;             // set PWM Frequency 4KHz  
-    CCP1CON = 0x0C;         // Configure CCP1CON as PWM mode.
- 	T2CON = 0x07;		//Start timer 2 with prescaler 1:16
-	PORTCbits.RC4 = 1;	// Turn ON the Motor
-    PORTCbits.RC5 = 0;
-  while(1)	// Endless Loop
-	{
-		// ----------Duty Cycle 25%-----------
-		CCP1CONbits.DC1B0 = 0;
-		CCP1CONbits.DC1B1 = 1;
-		CCPR1L = 0x13;
-		myMsDelay(2000);
-	//	 ----------Duty Cycle 50%-----------
-		CCP1CONbits.DC1B0 = 0;
-		CCP1CONbits.DC1B1 = 0;
-		CCPR1L = 0x27;
-		myMsDelay(2000);
- //----------Duty Cycle 75%-----------
-		CCP1CONbits.DC1B0 = 0;
-		CCP1CONbits.DC1B1 = 1;
-		CCPR1L = 0x3A;
-		myMsDelay(2000);
- 	}   
- 
+// -------------------------------------------------------
+// Main Program
+// -------------------------------------------------------
+void main(void)
+{
+    TRISCbits.TRISC2 = 0;   // RC2/CCP1 pin as output
+
+    PR2      = 0x4E;         // PWM period register (78 decimal)
+    CCP1CON  = 0x0C;         // CCP1 in PWM mode (bits[3:0] = 1100)
+    T2CON    = 0x07;         // Timer2 ON, prescaler = 1:16
+
+    while(1)
+    {
+        // ------------------------------------------------
+        //  25% Duty Cycle
+        //  10-bit = 79 (0x4F)
+        //  CCPR1L = 79 >> 2 = 19 = 0x13
+        //  DC1B1:DC1B0 = 79 & 0x03 = 3 -> (1,1)
+        // ------------------------------------------------
+        CCPR1L = 0x13;
+        CCP1CONbits.DC1B1 = 1;
+        CCP1CONbits.DC1B0 = 1;
+        myMsDelay(2000);
+
+        // ------------------------------------------------
+        //  50% Duty Cycle
+        //  10-bit = 158 (0x9E)
+        //  CCPR1L = 158 >> 2 = 39 = 0x27
+        //  DC1B1:DC1B0 = 158 & 0x03 = 2 -> (1,0)
+        // ------------------------------------------------
+        CCPR1L = 0x27;
+        CCP1CONbits.DC1B1 = 1;
+        CCP1CONbits.DC1B0 = 0;
+        myMsDelay(2000);
+
+        // ------------------------------------------------
+        //  75% Duty Cycle
+        //  10-bit = 237 (0xED)
+        //  CCPR1L = 237 >> 2 = 59 = 0x3B
+        //  DC1B1:DC1B0 = 237 & 0x03 = 1 -> (0,1)
+        // ------------------------------------------------
+        CCPR1L = 0x3B;
+        CCP1CONbits.DC1B1 = 0;
+        CCP1CONbits.DC1B0 = 1;
+        myMsDelay(2000);
+    }
 }
+
