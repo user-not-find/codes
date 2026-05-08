@@ -1,17 +1,22 @@
+//Triangular wave
 #include <reg51.h>
-void main() {
-    unsigned int x = 0;
-    while(1) {
-        // Rising part of the triangle wave
-        for(x = 0; x < 255; x++) {
-            P1 = x;   // Output ramp up on Port 1
+
+void main(void)
+{
+    unsigned int x;
+
+    while(1)
+    {
+        // Rising part of triangular wave
+        for(x = 0; x < 255; x++)
+        {
+            P1 = x;   // Ramp up
         }
-        // Falling part of the triangle wave
-        for(x = 255; x > 0; x--) {
-            P
 
-
-1 = x;   // Output ramp down on Port 1
+        // Falling part of triangular wave
+        for(x = 255; x > 0; x--)
+        {
+            P1 = x;   // Ramp down
         }
     }
 }
