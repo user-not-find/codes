@@ -1,29 +1,111 @@
-#include<reg51.h>
-void delay()
+//Stepper Motor
+#include <reg51.h>   // Header file for 8051 microcontroller
+
+// Stepper motor control pins connected to Port 1
+sbit IN1 = P1^4;
+sbit IN2 = P1^5;
+sbit IN3 = P1^6;
+sbit IN4 = P1^7;
+
+// Enable pins for L293D motor driver
+sbit EN1 = P1^0;
+sbit EN2 = P1^1;
+
+// Function declaration
+void delay(void);
+
+// Main function
+void main(void)
 {
-	int i,j;
-	for(i=0;i<10;i++)
-	{
-	for(j=0;j<1000 ;j++);
-	}
+    // Enable L293D outputs
+    EN1 = 1;
+    EN2 = 1;
+
+    while(1)
+    {
+        // Step 1
+        IN1 = 0;
+        IN2 = 0;
+        IN3 = 0;
+        IN4 = 1;
+        delay();
+
+        // Step 2
+        IN1 = 0;
+        IN2 = 0;
+        IN3 = 1;
+        IN4 = 0;
+        delay();
+
+        // Step 3
+        IN1 = 0;
+        IN2 = 1;
+        IN3 = 0;
+        IN4 = 0;
+        delay();
+
+        // Step 4
+        IN1 = 1;
+        IN2 = 0;
+        IN3 = 0;
+        IN4 = 0;
+        delay();
+    }
 }
 
-void main()
-	{
-	while(1)
-		{
-		P1=0x03;
-		delay();
-		
-		P1=0x06;
-		delay();
-		
-		P1=0x0C;
-		delay();
-		
-		P1=0x09;
-		delay();
-		
-	            }
-	}
+// Delay function
+void delay(void)
+{
+    unsigned int i, j;
 
+    for(i = 0; i < 10; i++)
+    {
+        for(j = 0; j < 100; j++);
+    }
+}
+
+
+
+
+
+//Another way to perform Stepper Motor
+#include <reg51.h>   // Header file for 8051 microcontroller
+
+// Function declaration
+void delay(void);
+
+// Main function
+void main(void)
+{
+    // Step sequence for stepper motor rotation
+    unsigned char source[4] =
+    {
+        0x13,
+        0x23,
+        0x43,
+        0x83
+    };
+
+    unsigned char i;
+
+    while(1)
+    {
+        // Rotate motor continuously
+        for(i = 0; i < 4; i++)
+        {
+            P1 = source[i];   // Send step sequence to Port 1
+            delay();          // Delay between steps
+        }
+    }
+}
+
+// Delay function
+void delay(void)
+{
+    unsigned int i, j;
+
+    for(i = 0; i < 10; i++)
+    {
+        for(j = 0; j < 100; j++);
+    }
+}
