@@ -1,30 +1,63 @@
-#include <reg51.h> 
-#define SegOne 0x02 
-#define SegTwo 0x01 
-void delay_ms(unsigned int ms_count) { 
-    unsigned int i, j; 
-    for (i = 0; i < ms_count; i++) 
-        for (j = 0; j < 1275; j++); 
-} 
-void main() { 
-    unsigned char seg_code[] = { 
-        0xC0, 0xF9, 0xA4, 0xB0, 0x99, 
-        0x92, 0x82, 0xF8, 0x80, 0x90 
-    }; 
-    int cnt, num, tens, ones, i; 
-    while (1) { 
-        for (cnt = 0; cnt <= 99; cnt++) { 
-            for (i = 0; i < 50; i++) { 
-                num = cnt; 
-                ones = num % 10; 
-                tens = num / 10; 
-                P2 = SegOne; 
-                P1 = seg_code[ones]; 
-                delay_ms(5); 
-                P2 = SegTwo; 
-                P1 = seg_code[tens]; 
-                delay_ms(5); 
-            } 
-        } 
-    } 
+// Seven segment 0-99
+#include <reg51.h>
+
+// Define control pins for two 7-segment displays
+#define SegOne 0x02
+#define SegTwo 0x01
+
+// Delay function
+void delay_ms(unsigned int ms_count)
+{
+    unsigned int i, j;
+
+    for(i = 0; i < ms_count; i++)
+    {
+        for(j = 0; j < 15; j++);
+    }
+}
+
+// Main function
+void main(void)
+{
+    // 7-segment codes for digits 0-9 (Common Anode)
+    unsigned char seg_code[] =
+    {
+        0xC0, // 0
+        0xF9, // 1
+        0xA4, // 2
+        0xB0, // 3
+        0x99, // 4
+        0x92, // 5
+        0x82, // 6
+        0xF8, // 7
+        0x80, // 8
+        0x90  // 9
+    };
+
+    unsigned int cnt;
+    unsigned char num, temp, i;
+
+    while(1)
+    {
+        for(cnt = 0; cnt <= 99; cnt++)
+        {
+            // Refresh display multiple times for stable viewing
+            for(i = 0; i < 100; i++)
+            {
+                num = cnt;
+
+                // Units digit
+                temp = num % 10;
+                P2 = SegOne;
+                P1 = seg_code[temp];
+                delay_ms(10);
+
+                // Tens digit
+                temp = num / 10;
+                P2 = SegTwo;
+                P1 = seg_code[temp];
+                delay_ms(10);
+            }
+        }
+    }
 }
