@@ -1,52 +1,148 @@
-#include<p18f4520.h>
-#pragma config OSC=HS
-#pragma config PWRT=OFF
-#pragma config WDT=OFF
-#pragma config DEBUG=OFF, LVP=OFF 
+// ============================================================
+//  Square Wave Generator - PIC18F4520
+//  Toggles PORTD every 50ms using Timer0 interrupt
+//  Generates a square wave with 100ms period (10 Hz)
+// ============================================================
+
+// ============================================================
+//  VERSION 1: 20 MHz Crystal (HS Oscillator) -- RECOMMENDED
+//
+//  Timer Calculation:
+//    Fosc/4 = 5 MHz (timer clock)
+//    50ms   = 5,000,000 x 0.05 = 250,000 ticks
+//    Prescaler 1:4 -> 250,000 / 4 = 62,500 counts
+//    Reload = 65536 - 62,500 = 3036 = 0x0BDC
+//    T0CON  = 0x01 (16-bit, internal, prescaler 1:4)
+// ============================================================
+
+#include <p18f4520.h>
+
+#pragma config OSC  = HS     // High-Speed crystal (suitable for 20 MHz)
+#pragma config PWRT = OFF
+#pragma config WDT  = OFF
+#pragma config DEBUG = OFF, LVP = OFF
+
+// ----------- Function Prototype -----------
+void timer_isr(void);
+
+// ----------- High Priority ISR Vector -----
+#pragma code HIGH_INTERRUPT_VECTOR = 0x08
+void high_ISR(void)
+{
+    _asm
+    goto timer_isr
+    _endasm
+}
+#pragma code
+
+// ----------- Timer0 ISR -------------------
+#pragma interrupt timer_isr
+void timer_isr(void)
+{
+    // Reload Timer0 for next 50ms (20 MHz, prescaler 1:4)
+    TMR0H = 0x0B;
+    TMR0L = 0xDC;
+
+    PORTD = ~PORTD;            // Toggle PORTD -> Square wave output
+    INTCONbits.TMR0IF = 0;    // Clear Timer0 overflow flag
+}
+
+// ----------- Main Program -----------------
+void main(void)
+{
+    ADCON1 = 0x0F;             // All I/O pins configured as digital
+    TRISD  = 0x00;             // PORTD set as output
+    PORTD  = 0x00;             // Initialize PORTD to 0 (all LEDs OFF)
+
+    // T0CON = 0x01:
+    //   bit7 TMR0ON = 0    (timer off initially, started below)
+    //   bit6 T08BIT = 0    (16-bit mode)
+    //   bit5 T0CS   = 0    (internal clock Fosc/4)
+    //   bit4 T0SE   = 0    (don't care for internal clock)
+    //   bit3 PSA    = 0    (prescaler assigned to Timer0)
+    //   bit2:0 T0PS = 001  (prescaler 1:4)
+    T0CON = 0x01;
+
+    TMR0H = 0x0B;              // Load high byte first (buffered)
+    TMR0L = 0xDC;              // Load low byte -> triggers 16-bit load
+
+    INTCON2bits.TMR0IP = 1;   // Timer0 -> High priority interrupt (explicit)
+    INTCONbits.TMR0IF  = 0;   // Clear overflow flag before enabling
+    INTCONbits.TMR0IE  = 1;   // Enable Timer0 interrupt
+    INTCONbits.GIE     = 1;   // Enable global interrupts
+
+    T0CONbits.TMR0ON = 1;     // Start Timer0
+
+    while(1);                  // Wait for interrupts
+}
+
+
+// ============================================================
+//  VERSION 2: 4 MHz Crystal (XT Oscillator)
+//
+//  Timer Calculation:
+//    Fosc/4 = 1 MHz (timer clock)
+//    50ms   = 1,000,000 x 0.05 = 50,000 counts
+//    No prescaler needed
+//    Reload = 65536 - 50,000 = 15536 = 0x3CB0
+//    T0CON  = 0x08 (16-bit, internal, prescaler bypassed)
+//
+//  To use this version:
+//    1. Change: #pragma config OSC = XT
+//    2. Change: T0CON = 0x08
+//    3. Change: TMR0H = 0x3C, TMR0L = 0xB0
+//    4. Update ISR reload values accordingly
+// ============================================================
+
+/*
+#include <p18f4520.h>
+
+#pragma config OSC  = XT     // XT oscillator for 4 MHz crystal
+#pragma config PWRT = OFF
+#pragma config WDT  = OFF
+#pragma config DEBUG = OFF, LVP = OFF
 
 void timer_isr(void);
 
-#pragma code _HIGH_INTERRUPT_VECTOR = 0x08
-
-void high_ISR (void)
-
+#pragma code HIGH_INTERRUPT_VECTOR = 0x08
+void high_ISR(void)
 {
-      _asm goto timer_isr _endasm    //The program is relocated to execute the interrupt routine timer_isr
-
+    _asm
+    goto timer_isr
+    _endasm
 }
-
 #pragma code
 
-// This function is executed as soon as the timer interrupt is generated due to timer overflow
-
 #pragma interrupt timer_isr
- 
 void timer_isr(void)
-
 {
-
-      TMR0H = 0X3C;              // Reloading the timer values after overflow
-      TMR0L = 0XB0;
-
-      PORTD = ~PORTD;              //Toggle the PORTD led outputs 
-      INTCONbits.TMR0IF = 0;//Resetting the timer overflow interrupt flag
+    TMR0H = 0x3C;              // Reload for 50ms @ 4 MHz, no prescaler
+    TMR0L = 0xB0;
+    PORTD = ~PORTD;
+    INTCONbits.TMR0IF = 0;
 }
 
-void main()
+void main(void)
+{
+    ADCON1 = 0x0F;
+    TRISD  = 0x00;
+    PORTD  = 0x00;
 
-{    
+    // T0CON = 0x08:
+    //   bit3 PSA = 1 -> prescaler bypassed (no prescaler)
+    //   16-bit mode, internal clock
+    T0CON = 0x08;
 
-      ADCON1 = 0x0F;        //Configuring the PORTE pins as digital I/O
-      TRISD = 0x00;                  //Configuring the LED port pins as outputs
-      PORTD = 0xFF;                //Setting the initial value of the LED's after reset
-     T0CON = 0x08;    //Set the timer to 16-bit mode,internal instruction cycle clock,no            prescaler
-  TMR0H = 0x3C;              
+    TMR0H = 0x3C;
     TMR0L = 0xB0;
 
-      INTCONbits.TMR0IF = 0;      // Clear Timer0 overflow flag
-      INTCONbits.TMR0IE = 1;      // TMR0 interrupt enabled
-      T0CONbits.TMR0ON = 1;       // Start timer0
-     INTCONbits.GIE = 1;               // Global interrupt enabled
-    while(1);      //Program execution stays here untill the timer overflow interrupt is generated
-  
+    INTCON2bits.TMR0IP = 1;
+    INTCONbits.TMR0IF  = 0;
+    INTCONbits.TMR0IE  = 1;
+    INTCONbits.GIE     = 1;
+
+    T0CONbits.TMR0ON = 1;
+
+    while(1);
 }
+*/
