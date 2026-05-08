@@ -1,29 +1,29 @@
-#include <reg51.h>   // Header file for 8051 microcontroller 
-// Function Declaration 
-void delay(void); 
- 
-// Main Function 
-void main(void) 
-{ 
-    unsigned int i;   // Variable for counting 
- 
-    while(1)          // Infinite loop 
-    { 
-        for(i = 0; i < 16; i++)   // Count from 0 to 15 (0000 to 1111 in binary) 
-        { 
-            P1 = i;    // Send the count value to Port 1 
-            delay();   // Call delay to slow down counting 
-        } 
-    } 
-} 
- 
-// Delay Function 
-void delay(void) 
-{ 
-    unsigned int j, k; 
- 
-    for(j = 0; j < 1000; j++)     // Outer loop 
-    { 
-        for(k = 0; k < 100; k++); // Inner loop for time delay 
-    } 
+//Binary counter display(hex/bcd)
+#include <reg51.h> //header file for 8051
+//function declaration
+void delay(void);
+//main function
+void main (void)
+{
+    unsigned int i; //variable for counting
+    while(1) //Infinite loop
+    {
+        for(i=0;i<16;i++) //for hex i<16   for bcd i<10 
+        {
+            P1 = i; //send count value to port 1
+            delay();  //call delay to slow down counting to make it visible
+        }
+    }
+}
+
+//Delay function
+void delay(void)
+{
+    unsigned int j,k;
+
+    for (j=0;j<1000;j++) //outer loop
+    {
+        for(k=0;k<100;k++); //inner loop for time delay
+    }
+
 }
