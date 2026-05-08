@@ -1,67 +1,126 @@
-#include <p18F4520.h>
-// ======== CONFIGURATION BITS ========
-#pragma config OSC = HS        // High-Speed Oscillator
-#pragma config PWRT = OFF      // Power-up Timer disabled
-#pragma config WDT = OFF       // Watchdog Timer disabled
-#pragma config LVP = OFF       // Low-voltage programming disabled
-#pragma config DEBUG = OFF     // Debug mode disabled
-#define _XTAL_FREQ 20000000    // 20 MHz crystal frequency
-// ======== PIN DEFINITIONS ========
+// ============================================================
+//  Relay, Buzzer & LED Control - PIC18F4520
+//  SW1 (RD0) -> Left  rotation: BUZZER ON,  Relay OFF
+//  SW2 (RD1) -> Right rotation: BUZZER OFF, Relay ON
+//  Switches are Active LOW (pressed = 0)
+//
+//  Pin Map:
+//    RD0 = SW1   (Input)
+//    RD1 = SW2   (Input)
+//    RD2 = Relay (Output)
+//    RD3 = Buzzer(Output)
+//    RD4 = LD1   (Output)
+//    RD5 = LD2   (Output)
+//    RD6 = LD3   (Output)
+//    RD7 = LD4   (Output)
+//
+//  TRISD = 0x03 = 0b00000011
+//    RD7-RD2 = Output (LEDs, Relay, Buzzer)
+//    RD1-RD0 = Input  (Switches)
+// ============================================================
+
+#include <p18f4520.h>
+
+#pragma config OSC   = HS
+#pragma config PWRT  = OFF
+#pragma config WDT   = OFF
+#pragma config DEBUG = OFF, LVP = OFF
+
+// Pin Definitions
 #define Relay   PORTDbits.RD2
-#define Buzzer  PORTDbits.RD3
+#define BUZZER  PORTDbits.RD3
 #define SW1     PORTDbits.RD0
 #define SW2     PORTDbits.RD1
 #define LD1     PORTDbits.RD4
 #define LD2     PORTDbits.RD5
 #define LD3     PORTDbits.RD6
 #define LD4     PORTDbits.RD7
-// ======== FUNCTION DECLARATIONS ========
+
+// Function Declarations
 void msdelay(unsigned int itime);
 void Right(void);
 void Left(void);
-// ======== MAIN FUNCTION ========
-void main(void) {
-    TRISD = 0x03;     // RD0, RD1 as input; RD2–RD7 as output
-    ADCON1 = 0x0F;    // Configure PORTD as digital I/O
-    PORTD = 0x00;     // Clear PORTD outputs
-    Relay = 0;
-    Buzzer = 0;
-    while(1) {
-        if(SW1 == 0) {    // Switch 1 pressed → Right direction
-            Right();
-        }
-        else if(SW2 == 0) {   // Switch 2 pressed → Left direction
+
+// -------------------------------------------------------
+// Main
+// -------------------------------------------------------
+void main(void)
+{
+    TRISD  = 0x03;   // RD0, RD1 as Input; RD2-RD7 as Output
+    ADCON1 = 0x0F;   // All pins as Digital I/O
+    PORTD  = 0x00;   // Initialize all outputs LOW
+
+    while(1)
+    {
+        if(SW1 == 0)    // SW1 pressed -> Left rotation
             Left();
-        }
+        if(SW2 == 0)    // SW2 pressed -> Right rotation
+            Right();
     }
 }
-// ======== RIGHT SEQUENCE ========
-void Right(void) {
-    Relay = 1;
-    Buzzer = 1;
-    while(SW2 != 0) {      // Run until SW2 is pressed
-        LD1 = 1; LD2 = 0; LD3 = 0; LD4 = 0; msdelay(100);
-        LD1 = 0; LD2 = 1; LD3 = 0; LD4 = 0; msdelay(100);
-        LD1 = 0; LD2 = 0; LD3 = 1; LD4 = 0; msdelay(100);
-        LD1 = 0; LD2 = 0; LD3 = 0; LD4 = 1; msdelay(100);
-        if(SW2 == 0) break;   // Stop if SW2 pressed
+
+// -------------------------------------------------------
+// Right Rotation
+// LEDs shift: LD1 -> LD2 -> LD3 -> LD4
+// Relay ON, Buzzer OFF
+// Continues while SW2 is held pressed
+// -------------------------------------------------------
+void Right(void)
+{
+    Relay  = 1;     // Relay ON for Right rotation
+    BUZZER = 0;     // Buzzer OFF
+
+    // FIX: Loop while SW2 is pressed (SW2==0), exit when released
+    while(SW2 == 0)
+    {
+        // FIX: Removed unreachable if(SW1==0) — while condition handles exit
+        // FIX: Removed Relay=0 inside steps — Relay stays ON during Right
+
+        LD1=1; LD2=0; LD3=0; LD4=0; msdelay(30);
+        LD1=0; LD2=1; LD3=0; LD4=0; msdelay(30);
+        LD1=0; LD2=0; LD3=1; LD4=0; msdelay(30);
+        LD1=0; LD2=0; LD3=0; LD4=1; msdelay(30);
     }
-    Buzzer = 0;
-}
-// ======== LEFT SEQUENCE ========
-void Left(void) {
+
+    // Turn off all LEDs when done
+    LD1=0; LD2=0; LD3=0; LD4=0;
     Relay = 0;
-    Buzzer = 0;
-    while(SW1 != 0) {      // Run until SW1 is pressed
-        LD1 = 0; LD2 = 0; LD3 = 0; LD4 = 1; msdelay(100);
-        LD1 = 0; LD2 = 0; LD3 = 1; LD4 = 0; msdelay(100);
-        LD1 = 0; LD2 = 1; LD3 = 0; LD4 = 0; msdelay(100);
-        LD1 = 1; LD2 = 0; LD3 = 0; LD4 = 0; msdelay(100);
-        if(SW1 == 0) break;   // Stop if SW1 pressed
-    }
 }
-// ======== DELAY FUNCTION ========
-void msdelay(unsigned int itime) {
+
+// -------------------------------------------------------
+// Left Rotation
+// LEDs shift: LD4 -> LD3 -> LD2 -> LD1
+// Relay OFF, Buzzer ON
+// Continues while SW1 is held pressed
+// -------------------------------------------------------
+void Left(void)
+{
+    Relay  = 0;     // Relay OFF for Left rotation
+    BUZZER = 1;     // Buzzer ON
+
+    // FIX: No semicolon — loop body runs while SW1 is pressed
+    // FIX: Mirrors Right() structure correctly
+    // FIX: Removed blocking while(SW2!=0) and misplaced if(SW2==0)
+    // FIX: Removed Relay=1 inside steps — Relay stays OFF during Left
+
+    while(SW1 == 0)
+    {
+        LD1=0; LD2=0; LD3=0; LD4=1; msdelay(30);
+        LD1=0; LD2=0; LD3=1; LD4=0; msdelay(30);
+        LD1=0; LD2=1; LD3=0; LD4=0; msdelay(30);
+        LD1=1; LD2=0; LD3=0; LD4=0; msdelay(30);
+    }
+
+    // Turn off all LEDs and Buzzer when done
+    LD1=0; LD2=0; LD3=0; LD4=0;
+    BUZZER = 0;
+}
+
+// -------------------------------------------------------
+// Millisecond Delay (calibrated for 20 MHz)
+// -------------------------------------------------------
+void msdelay(unsigned int itime)
+{
     unsigned int i, j;
     for(i = 0; i < itime; i++)
         for(j = 0; j < 1275; j++);
