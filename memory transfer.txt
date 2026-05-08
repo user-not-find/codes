@@ -1,0 +1,15 @@
+#include <reg51.h>
+
+void main()
+{
+    unsigned char source[4] = {0x10, 0x20, 0x30, 0x40};
+    unsigned char destination[4];
+    unsigned char i;
+
+    for(i = 0; i < 4; i++)
+    {
+        destination[i] = source[i];
+    }
+
+    while(1);
+}
