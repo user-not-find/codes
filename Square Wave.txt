@@ -1,18 +1,34 @@
-#include <reg51.h>
-void Tdelay() {
-    TMOD = 0x10;   // Timer1 in Mode 1 (16-bit timer)
-    TH1 = 0xFF;    // Load high byte
-    TL1 = 0x9A;    // Load low byte (approx delay)
-    TR1 = 1;       // Start Timer1
-    while (TF1 == 0);  // Wait until timer overflows
-    TR1 = 0;       // Stop timer
-    TF1 = 0;       // Clear overflow flag
-}
-void main() {
-    while(1) {
-        P1 = 0xFF;   // Output high (Square wave high)
-        Tdelay();
-        P1 = 0x00;   // Output low (Square wave low)
-        Tdelay();
+//DAC Square wave
+#include <reg51.h>   // Header file for 8051 microcontroller
+
+// Function declaration
+void delay(void);
+
+// Main function
+void main(void)
+{
+    while(1)
+    {
+        P1 = 0x00;   // Output LOW level to DAC
+        delay();     // Wait for some time
+
+        P1 = 0xFF;   // Output HIGH level to DAC
+        delay();     // Wait for some time
     }
+}
+
+// Delay function using Timer 1
+void delay(void)
+{
+    TMOD = 0x10;   // Configure Timer1 in Mode1 (16-bit timer)
+
+    TH1 = 0xFF;    // Load higher byte for delay
+    TL1 = 0x1A;    // Load lower byte for delay
+
+    TR1 = 1;       // Start Timer1
+
+    while(TF1 == 0);   // Wait until Timer1 overflow flag becomes 1
+
+    TR1 = 0;       // Stop Timer1
+    TF1 = 0;       // Clear overflow flag
 }
