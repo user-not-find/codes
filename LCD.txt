@@ -1,79 +1,133 @@
+// ============================================================
+//  LCD Interface - PIC18F4520
+//  8-bit mode, 16x2 HD44780-compatible LCD
+//  Crystal: 20 MHz (HS mode)
+//
+//  Connections:
+//    LCD D0-D7  ->  PORTB (RB0-RB7)
+//    RS         ->  RD3
+//    RW         ->  RD4
+//    EN         ->  RD5
+// ============================================================
+
 #include <p18f4520.h>
-// ===== Configuration Bits =====
-#pragma config OSC = HS, PWRT = OFF, WDT = OFF, LVP = OFF, DEBUG = OFF, PBADEN = OFF
-#define _XTAL_FREQ 20000000    // 20 MHz Crystal Frequency
-// ===== LCD Pin Definitions =====
-#define LCD_DATA PORTD
-#define RS PORTEbits.RE0
-#define RW PORTEbits.RE1
-#define EN PORTEbits.RE2
-// ===== Function Prototypes =====
-void LCD_Init(void);
-void LCD_Cmd(unsigned char cmd);
-void LCD_Write(unsigned char data);
-void LCD_Write_String(const char *str);
-void MSDelay(unsigned int time);
-// ===== MAIN PROGRAM =====
+
+// Configuration Bits
+#pragma config OSC   = HS
+#pragma config PWRT  = OFF
+#pragma config WDT   = OFF
+#pragma config DEBUG = OFF, LVP = OFF
+
+// LCD Pin Definitions
+#define ldata  PORTB
+#define rs     PORTDbits.RD3
+#define rw     PORTDbits.RD4
+#define en     PORTDbits.RD5
+
+// Function Declarations
+void delay(unsigned int value);
+void lcdcmd(unsigned char value);
+void lcddata(unsigned char value);
+void lcdinit(void);
+void lcddisplay(int row, unsigned char *str);
+
+// Messages
+unsigned char msg1[] = {" PVG COET "};
+unsigned char msg2[] = {"  PUNE    "};
+
+// -------------------------------------------------------
+// Main
+// -------------------------------------------------------
 void main(void)
 {
-    ADCON1 = 0x0F;   // Configure PORTE as digital I/O
-    TRISD = 0x00;    // PORTD as output (LCD Data)
-    TRISE = 0x00;    // PORTE as output (LCD Control)
-    LCD_DATA = 0x00;
-    PORTE = 0x00;
-    LCD_Init();        // Initialize LCD
-    MSDelay(50);       // Small delay
-    LCD_Write_String("LOGSUN SYSTEM");   // First line
-    LCD_Cmd(0xC0);                      // Move to second line
-    LCD_Write_String("PIC18F4520");     // Second line
-    while(1);          // Infinite loop
+    TRISB  = 0x00;   // PORTB as output (LCD Data)
+    TRISD  = 0x00;   // PORTD as output (RS, RW, EN)
+    ADCON1 = 0x0F;   // All pins as Digital I/O
+
+    lcdinit();               // Initialize LCD
+    lcddisplay(1, msg1);     // Display msg1 on Row 1
+    lcddisplay(2, msg2);     // Display msg2 on Row 2
+
+    while(1);
 }
 
-// ===== LCD INITIALIZATION =====
-void LCD_Init(void)
-{
-    MSDelay(20);
-    LCD_Cmd(0x38);     // 8-bit mode, 2-line, 5x7 font
-    MSDelay(5);
-    LCD_Cmd(0x0C);     // Display ON, Cursor OFF
-    MSDelay(5);
-    LCD_Cmd(0x01);     // Clear display
-    MSDelay(5);
-    LCD_Cmd(0x80);     // Move cursor to 1st line, position 0
-}
-// ===== SEND COMMAND TO LCD =====
-void LCD_Cmd(unsigned char cmd)
-{
-    LCD_DATA = cmd;
-    RS = 0;
-    RW = 0;
-    EN = 1;
-    MSDelay(2);
-    EN = 0;
-}
-// ===== SEND DATA TO LCD =====
-void LCD_Write(unsigned char data)
-{
-    LCD_DATA = data;
-    RS = 1;
-    RW = 0;
-    EN = 1;
-    MSDelay(2);
-    EN = 0;
-}
-// ===== SEND STRING TO LCD =====
-void LCD_Write_String(const char *str)
-{
-    while(*str)
-    {
-        LCD_Write(*str++);
-        MSDelay(2);
-    }
-}
-// ===== SIMPLE DELAY FUNCTION =====
-void MSDelay(unsigned int time)
+// -------------------------------------------------------
+// Delay Function
+// Each count is approx 1ms at 20 MHz
+// -------------------------------------------------------
+void delay(unsigned int value)
 {
     unsigned int i, j;
-    for(i = 0; i < time; i++)
-        for(j = 0; j < 710; j++);
+    for(i = 0; i < value; i++)       // FIX: < instead of <=
+        for(j = 0; j < 2000; j++);   // FIX: < instead of <=
+}
+
+// -------------------------------------------------------
+// Send Command to LCD
+// -------------------------------------------------------
+void lcdcmd(unsigned char value)
+{
+    ldata = value;  // Put command on data bus
+    rs = 0;         // RS = 0 -> Command mode
+    rw = 0;         // RW = 0 -> Write mode
+    en = 1;         // Enable HIGH
+    delay(1);       // EN pulse width (hold data stable)
+    en = 0;         // Enable LOW -> latch command
+    delay(2);       // FIX: Execution time after EN goes low (~37us min, using 2ms safe margin)
+}
+
+// -------------------------------------------------------
+// Send Data (Character) to LCD
+// -------------------------------------------------------
+void lcddata(unsigned char value)
+{
+    ldata = value;  // Put character on data bus
+    rs = 1;         // RS = 1 -> Data mode
+    rw = 0;         // RW = 0 -> Write mode
+    en = 1;         // Enable HIGH
+    delay(1);       // EN pulse width
+    en = 0;         // Enable LOW -> latch data
+    delay(2);       // FIX: Execution time after EN goes low
+}
+
+// -------------------------------------------------------
+// LCD Initialization Sequence (HD44780)
+// -------------------------------------------------------
+void lcdinit(void)
+{
+    lcdcmd(0x38); delay(2);   // 8-bit mode, 2-line, 5x7 font
+    lcdcmd(0x0E); delay(2);   // Display ON, Cursor ON, No Blink
+    lcdcmd(0x01); delay(5);   // FIX: Clear Screen needs >=1.52ms, use delay(5) for safety
+    lcdcmd(0x06); delay(2);   // Entry mode: cursor auto-increment, no display shift
+    lcdcmd(0x80); delay(2);   // Set DDRAM to row 1, position 0
+}
+
+// -------------------------------------------------------
+// Display String on LCD
+//   row = 1 -> Row 1 (DDRAM address 0x80)
+//   row = 2 -> Row 2 (DDRAM address 0xC0)
+// Pads with spaces to fill 16 characters
+// -------------------------------------------------------
+void lcddisplay(int row, unsigned char *str)
+{
+    int i = 0;
+
+    if(row == 1)
+        lcdcmd(0x80);   // Row 1 start address
+    else
+        lcdcmd(0xC0);   // Row 2 start address (0x80 | 0x40)
+
+    // Send characters (max 16)
+    while(str[i] != '\0' && i < 16)
+    {
+        lcddata(str[i]);
+        i++;
+    }
+
+    // Pad remaining positions with spaces
+    while(i < 16)
+    {
+        lcddata(' ');
+        i++;
+    }
 }
